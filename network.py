@@ -17,71 +17,65 @@ def convert_to_int(data):
 
 # dodac one-hot embedding
 # zrobic podzial na batche
-# dodac pobieranie pliku zamiast uzywanie
+# dodac pobieranie pliku zamiast uzywanie sciezki
 
 class Network(nn.Module):
-    def __init__(self, tokens):
+    def __init__(self, tokens, embedding_dim, hidden_dim):
         # dodac parametr embedding_dim
-        self.embedding_dim = 64
-        self.hidden_dim = 64
-
+        self.hidden_dim = hidden_dim
+        self.embedding_dim = embedding_dim
         super().__init__()
-        self.chars = tokens
-        self.chars_as_int = dict(enumerate(tokens))
-        self.embedding = nn.Embedding(len(tokens), self.embedding_dim) # tutaj embedding_dim = 16
+        self.embedding = nn.Embedding(len(tokens), embedding_dim) # tutaj embedding_dim = 16
 
-        self.lstm = nn.LSTM(self.embedding_dim, self.hidden_dim)
-        self.fc = nn.Linear(self.hidden_dim, len(tokens))
+        self.lstm = nn.LSTM(embedding_dim, hidden_dim)
+        self.fc = nn.Linear(hidden_dim, len(tokens))
     
     def init_hidden(self):
-        self.hidden  = (torch.randn(1,1,self.hidden_dim), torch.randn(1,1,self.hidden_dim))
-        return self.hidden
+        return (torch.randn(1,1,self.hidden_dim), torch.randn(1,1,self.hidden_dim))
 
     def forward(self, x, hidden):
-        
         x, hidden = self.lstm(x, hidden)
         x = x.view(x.shape[0], -1)
         x = self.fc(x)
         return x, hidden
 
 
-def train(net, data):
-    print(optim)
-    optimizer = optim.Adam(net.parameters(), lr=0.001)
+def train(net, data, epochs=5, seq_size=64, clip=5, lr=0.0003, val_freq=0.2):
+    optimizer = optim.Adam(net.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
-    embedding = net.embedding
 
-    val_idx = int((len(data)*0.9))
+    val_idx = int((len(data)*(1-val_freq)))
     data, val_data = data[:val_idx], data[val_idx:]
-    hidden = net.init_hidden()
-    running_loss = 0.0
 
-    seq_size = 64
-    for i in range(len(data)-seq_size):
-        x, y = torch.Tensor(data[i:(i+seq_size)]).long(), torch.Tensor(data[(i+1):(i+seq_size+1)]).long()
-        x = embedding(x)
-        x = x.view(seq_size, 1, -1)
-        hidden = tuple([each.data for each in hidden])
-        
-        net.zero_grad()
-        out, hidden = net(x, hidden)
-        loss = criterion(out, y)
-        running_loss += loss
-        loss.backward()
-        nn.utils.clip_grad_norm_(net.parameters(), 5)
-        optimizer.step()
-        if(i % seq_size == 0):
-            print(running_loss.item())
-            running_loss = 0.0
-        # print(x, y)
+
+    for e in range(epochs):
+        hidden = net.init_hidden()
+        running_loss = 0.0
+        for i in range(len(data)-seq_size):
+            x, y = torch.Tensor(data[i:(i+seq_size)]).long(), torch.Tensor(data[(i+1):(i+seq_size+1)]).long()
+            x = net.embedding(x)
+            x = x.view(seq_size, 1, -1)
+
+            hidden = tuple([each.data for each in hidden])
+            net.zero_grad()
+            out, hidden = net(x, hidden)
+            loss = criterion(out, y)
+            running_loss += loss
+            loss.backward()
+            nn.utils.clip_grad_norm_(net.parameters(), 5)
+            optimizer.step()
+            # print(seq_size)
+            if(i % seq_size == 0):
+                print(i)
+                print(running_loss.item())
+                running_loss = 0.0
+            # print(x, y)
 
 
 
 data = read_text('./text.txt')
-# data = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
 tokens = set(data)
 data_as_int = convert_to_int(data)
-print(data_as_int[100:200])
 
-net = Network(tokens)
+net = Network(tokens, 64, 64)
 train(net, data_as_int)
