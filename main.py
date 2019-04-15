@@ -12,5 +12,6 @@ else:
 data = utils.read_text('./text.txt')
 tokens = set(data)
 
-net = network.Network(tokens, 64, 64)
+#endtest
+net = network.Network(tokens, 64, 512)
 network.train(net, data)
