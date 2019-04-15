@@ -4,6 +4,14 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+# setting training to gpu if avaiable
+train_on_gpu = torch.cuda.is_available()
+if(train_on_gpu):
+    print('Training on GPU!')
+else: 
+    print('No GPU available, training on CPU; consider making n_epochs very small.')
+
+
 def read_text(path):
     with open(path, 'r') as file:
         data = file.read()
@@ -31,6 +39,8 @@ class Network(nn.Module):
         self.fc = nn.Linear(hidden_dim, len(tokens))
     
     def init_hidden(self):
+        if(train_on_gpu):
+            return (torch.randn(1,1,self.hidden_dim).cuda(), torch.randn(1,1,self.hidden_dim).cuda())
         return (torch.randn(1,1,self.hidden_dim), torch.randn(1,1,self.hidden_dim))
 
     def forward(self, x, hidden):
@@ -47,15 +57,18 @@ def train(net, data, epochs=5, seq_size=64, clip=5, lr=0.0003, val_freq=0.2):
     val_idx = int((len(data)*(1-val_freq)))
     data, val_data = data[:val_idx], data[val_idx:]
 
+    if(train_on_gpu):
+        net.cuda()
 
     for e in range(epochs):
         hidden = net.init_hidden()
         running_loss = 0.0
         for i in range(len(data)-seq_size):
             x, y = torch.Tensor(data[i:(i+seq_size)]).long(), torch.Tensor(data[(i+1):(i+seq_size+1)]).long()
+            if(train_on_gpu):
+                x, y = x.cuda(), y.cuda()
             x = net.embedding(x)
             x = x.view(seq_size, 1, -1)
-
             hidden = tuple([each.data for each in hidden])
             net.zero_grad()
             out, hidden = net(x, hidden)
@@ -65,9 +78,8 @@ def train(net, data, epochs=5, seq_size=64, clip=5, lr=0.0003, val_freq=0.2):
             nn.utils.clip_grad_norm_(net.parameters(), 5)
             optimizer.step()
             # print(seq_size)
-            if(i % seq_size == 0):
-                print(i)
-                print(running_loss.item())
+            if(i % 250 == 0):
+                print("train_loss aftter {0} = {1:.7f}".format(i, running_loss.item()))
                 running_loss = 0.0
             # print(x, y)
 
