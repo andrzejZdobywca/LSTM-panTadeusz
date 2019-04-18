@@ -18,6 +18,7 @@ class Network(nn.Module):
 
         self.embedding = nn.Embedding(len(tokens), embedding_dim)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
+        self.dropout = nn.Dropout(p=0.3)
         self.fc = nn.Linear(hidden_dim, len(tokens))
     
     def init_hidden(self, batch_size):
@@ -27,11 +28,12 @@ class Network(nn.Module):
 
     def forward(self, x, hidden):
         x, hidden = self.lstm(x, hidden)
+        x = self.dropout(x)
         x = x.contiguous().view(-1, self.hidden_dim)
         x = self.fc(x)
         return x, hidden
 
-    def predict(self, char, hidden, top_k):
+    def predict(self, char, hidden, top_k=3):
         x = [utils.convert_to_int(char)]
         x = torch.Tensor(x).long()
         if(TRAIN_ON_GPU):
@@ -44,12 +46,16 @@ class Network(nn.Module):
 
         if(TRAIN_ON_GPU):
             p = p.cpu()
-        _, char = p.topk(1)
-        char_id = char.item()
+        
+        p, top_ch = p.topk(top_k)
+        top_ch = top_ch.numpy().squeeze()
+        p = p.numpy().squeeze()
+
+        char_id = np.random.choice(top_ch, p=p/p.sum())
         new_char = self.to_char_mapping[char_id]
         return new_char, hidden
 
-    def sample(self, size, prime='The', top_k=None):
+    def sample(self, size, prime='Pan', top_k=None):
 
         if(TRAIN_ON_GPU):
             self.cuda()
@@ -71,7 +77,7 @@ class Network(nn.Module):
         return ''.join(chars)
 
 
-def train(net, data, epochs=10, batch_size=32, seq_length=50, clip=5, lr=0.0003, val_freq=0.2, print_every=40):
+def train(net, data, epochs=10, batch_size=16, seq_length=50, clip=5, lr=0.001, val_freq=0.2, print_every=40):
 
     net.train()
     # set optimizer and loss function
