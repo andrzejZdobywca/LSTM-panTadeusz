@@ -14,4 +14,7 @@ tokens = set(data)
 
 #endtest
 net = network.Network(tokens, 64, 512)
+hidden = net.init_hidden(1)
 network.train(net, data)
+result = net.sample(40, top_k=5)
+print(result)

@@ -4,6 +4,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import utils
+# TODO:
+# sprawdzic czy uda mi sie zamienic na self.hidden zamiast hidden
 
 TRAIN_ON_GPU = torch.cuda.is_available()
 class Network(nn.Module):
@@ -11,6 +13,8 @@ class Network(nn.Module):
         super().__init__()
         self.hidden_dim = hidden_dim
         self.embedding_dim = embedding_dim
+        self.to_int_mapping = dict([(x, i) for i, x in enumerate(tokens)])
+        self.to_char_mapping = dict([(i, x) for i, x in enumerate(tokens)])
 
         self.embedding = nn.Embedding(len(tokens), embedding_dim)
         self.lstm = nn.LSTM(embedding_dim, hidden_dim, batch_first=True)
@@ -27,8 +31,45 @@ class Network(nn.Module):
         x = self.fc(x)
         return x, hidden
 
+    def predict(self, char, hidden, top_k):
+        x = [utils.convert_to_int(char)]
+        x = torch.Tensor(x).long()
+        x = self.embedding(x)
+        # hidden = tuple([each.data for each in hidden])
 
-def train(net, data, epochs=10, batch_size=16, seq_length=50, clip=5, lr=0.0003, val_freq=0.2, print_every=40):
+        out, hidden = self.forward(x, hidden)
+        p = F.softmax(out, dim=1).data
+
+        if(TRAIN_ON_GPU):
+            p = p.cpu()
+        _, char = p.topk(1)
+        char_id = char.item()
+        new_char = self.to_char_mapping[char_id]
+        return new_char, hidden
+
+    def sample(self, size, prime='The', top_k=None):
+
+        if(TRAIN_ON_GPU):
+            self.cuda()
+        else:
+            self.cpu()
+        
+        self.eval()
+
+        chars = [ch for ch in prime]
+        hidden = self.init_hidden(1)
+        for ch in prime:
+            char, hidden = self.predict(ch, hidden, top_k=top_k)
+        chars.append(char)
+        
+        for ii in range(size):
+            char, hidden = self.predict(chars[-1], hidden, top_k=top_k)
+            chars.append(char)
+
+        return ''.join(chars)
+
+
+def train(net, data, epochs=1, batch_size=128, seq_length=50, clip=5, lr=0.0003, val_freq=0.2, print_every=10):
 
     # set optimizer and loss function
     optimizer = optim.Adam(net.parameters(), lr=lr)
