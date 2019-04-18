@@ -34,6 +34,8 @@ class Network(nn.Module):
     def predict(self, char, hidden, top_k):
         x = [utils.convert_to_int(char)]
         x = torch.Tensor(x).long()
+        if(TRAIN_ON_GPU):
+            x = x.cuda()
         x = self.embedding(x)
         # hidden = tuple([each.data for each in hidden])
 
@@ -69,8 +71,9 @@ class Network(nn.Module):
         return ''.join(chars)
 
 
-def train(net, data, epochs=1, batch_size=128, seq_length=50, clip=5, lr=0.0003, val_freq=0.2, print_every=10):
+def train(net, data, epochs=10, batch_size=32, seq_length=50, clip=5, lr=0.0003, val_freq=0.2, print_every=40):
 
+    net.train()
     # set optimizer and loss function
     optimizer = optim.Adam(net.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
